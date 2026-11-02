@@ -1,0 +1,11 @@
+services:
+  main:
+    depends_on:
+      target:
+        condition: service_healthy
+  target:
+    build: ./target
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/')"]
+      interval: 2s
+      retries: 15

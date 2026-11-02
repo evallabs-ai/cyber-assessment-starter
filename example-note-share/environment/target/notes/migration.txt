@@ -1,0 +1,2 @@
+Migration reminder: old test value was FLAG{this_is_a_decoy_not_the_flag}. Remove before launch.
+Private data moved to the private directory next to notes.

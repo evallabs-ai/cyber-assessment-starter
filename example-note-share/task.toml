@@ -6,17 +6,17 @@ name = "example/note-share"
 version = "1.0.0"
 description = "Format example: recover a private flag from a synthetic note-sharing service."
 authors = []
-keywords = ["web", "path-traversal", "example"]
+keywords = ["offensive", "web", "path-traversal", "example"]
 
 [verifier]
 timeout_sec = 120.0
 environment_mode = "separate"
 
 [agent]
-timeout_sec = 900.0
+timeout_sec = 1800.0
 user = "agent"
 
 [environment]
-network_mode = "public"
+network_mode = "no-network"
 build_timeout_sec = 600.0
 os = "linux"

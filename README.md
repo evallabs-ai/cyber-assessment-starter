@@ -1,6 +1,6 @@
 # Cyber task assessment
 
-Thanks for your interest in Eval Labs. The next step is to build one cyber task that a frontier AI model fails most of the time, but not every time. We use tasks like this to test and train AI models on real security work.
+Thanks for your interest in Eval Labs. The next step is to build one cyber task that a frontier AI model fails most of the time, but not every time, and explain why it fails. We use tasks like this to test and train AI models on real security work.
 
 You'll build the task with [Harbor](https://github.com/harbor-framework/harbor), an open-source framework for running AI agents on tasks like this one. Harbor builds your task's containers, runs your solutions and the model against it, and scores each run. You don't need to know it already: this repo includes an example task and a script that runs the checks for you.
 
@@ -105,9 +105,23 @@ harbor run -p <your-task-folder> -a kimi-code -m openrouter/moonshotai/kimi-k3.1
 harbor view jobs
 ```
 
-This needs an [OpenRouter](https://openrouter.ai) API key, separate from the Anthropic key the rubric check above uses. `--allow-agent-host` lets the model reach OpenRouter while the task itself stays offline. `-k 5` runs it five times, and your task should pass 1 or 2 of them. `harbor view` shows what the model did on each run, which you need for the failure analysis in `SUBMISSION.md`.
+This needs an [OpenRouter](https://openrouter.ai) API key, separate from the Anthropic key the rubric check above uses. `--allow-agent-host` lets the model reach OpenRouter while the task itself stays offline. `-k 5` runs it five times, and your task should pass 1 or 2 of them. `harbor view` shows what the model did on each run, which you need for the failure analysis below.
 
 These steps cost money on your own key. If you don't have a key, skip them, because we run our own rubric check and model tests on every submission.
+
+## Analyze the model's runs
+
+A pass rate shows that your task is hard, but not what makes it hard for the model. We want to understand the capability gap: what the model can't do yet, and why.
+
+Once your runs look right, read through each one in `harbor view` and fill in `FAILURE_ANALYSIS.md`. Keep it to about a page, covering:
+
+1. **Where the model fails:** the step where each failed run went wrong, and how far it got before that.
+2. **Why it fails:** the cause behind each failure, such as a wrong assumption or a technique it couldn't carry out, and whether the failures share one.
+3. **The capability gap:** the specific thing the model can't do yet, and what a skilled practitioner would have done instead.
+
+You can use an LLM to help you go through the run logs in `jobs/<job>/` and draft this. Check its conclusions against the runs yourself, because we'll hold you to what the file says.
+
+If you didn't run a model, write "Not run" in the file.
 
 ## How we judge it
 
@@ -118,10 +132,11 @@ These steps cost money on your own key. If you don't have a key, skip them, beca
 5. Kimi K3.1 Pro passes 1 or 2 of 5 runs and fails the rest. A refusal doesn't count as a failure.
 6. Nothing is cheating its way past the check, and the task isn't a copy.
 7. A security reviewer on our side agrees it's realistic.
+8. If you ran a model, `FAILURE_ANALYSIS.md` names a specific capability gap and backs it up with evidence from your runs.
 
 ## Submit
 
-1. Fill in `SUBMISSION.md` and push.
+1. Fill in `SUBMISSION.md` and `FAILURE_ANALYSIS.md`, then push.
 2. Add `aaron-bench` to your repo as a collaborator (**Settings → Collaborators → Add people**).
 3. Fill in the form: https://tally.so/r/jeZv7J.
 

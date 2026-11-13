@@ -117,13 +117,31 @@ elif ! LC_ALL=C grep -q '[^[:space:]]' "$write_up"; then
 else
   echo "PASS  SUBMISSION.md"
 fi
-# The portal also refuses a copy under environment/, which images are built from, and any
-# RUN_ANALYSIS.md, which it adds itself.
-misplaced=$( { find "$task/environment" -iname SUBMISSION.md; find "$task" -iname RUN_ANALYSIS.md; } 2>/dev/null)
-if [ -n "$misplaced" ]; then
-  echo "FAIL  these files can't be in the task. Keep SUBMISSION.md only beside instruction.md, and RUN_ANALYSIS.md outside the task folder:"
-  printf '%s\n' "$misplaced" | sed 's/^/        /'
+# The portal also refuses a copy under environment/, which images are built from.
+copies=$(find "$task/environment" -iname SUBMISSION.md 2>/dev/null)
+if [ -n "$copies" ]; then
+  echo "FAIL  these files can't be in the task. Keep SUBMISSION.md only beside instruction.md:"
+  printf '%s\n' "$copies" | sed 's/^/        /'
   failed=1
+fi
+
+# The run analysis goes beside the task folder. It's written after the model runs, which usually
+# come after this script, so these lines only remind you and never fail it.
+analysis="$(cd "$task/.." && pwd)/RUN_ANALYSIS.md"
+# The SHA-256 of the blank RUN_ANALYSIS.md template. Update it whenever the template changes:
+#   tr -d '\r' < RUN_ANALYSIS.md | shasum -a 256
+template_sha=91df6506a657234a03b2a55a65126660fe6e83c014f1fcd719befd592da91e0e
+sha256() { if command -v sha256sum >/dev/null; then sha256sum; else shasum -a 256 2>/dev/null; fi | cut -d' ' -f1; }
+if [ ! -f "$analysis" ] || ! LC_ALL=C grep -q '[^[:space:]]' "$analysis" \
+  || [ "$(tr -d '\r' < "$analysis" | sha256)" = "$template_sha" ]; then
+  echo "WARN  RUN_ANALYSIS.md isn't filled in yet. Write it after the model runs: push it with your task (assessment), or load it into Run analysis on the portal."
+else
+  echo "PASS  RUN_ANALYSIS.md"
+fi
+inside=$(find "$task" -iname RUN_ANALYSIS.md)
+if [ -n "$inside" ]; then
+  echo "WARN  Keep RUN_ANALYSIS.md beside the task folder, not in it."
+  printf '%s\n' "$inside" | sed 's/^/        /'
 fi
 
 # We test a clean clone, so anything that isn't committed won't be there.

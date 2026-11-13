@@ -5,7 +5,7 @@ Keep this to about a page. Base it on what the runs show, not on what you expect
 Keep this file outside your task folder. How you submit decides when you write it and where it goes:
 
 - **The assessment:** fill it in once your runs look right, and push it with your task. If you didn't run a model, write "Not run" here and delete the rest. We'll judge from our own runs and your answers in `SUBMISSION.md`.
-- **Altadena Portal:** write it after the portal's Model run, from the Agent runs tab and the run's logs. Paste it, or load this file, into the Run analysis section on the Agent runs tab, and save it before you submit, as cyber tasks can't be submitted without it. Running Model runs again, or an upload that replaces the version's files, clears it, and the portal warns you before either. When you submit, it's locked and added to the version's zip as `RUN_ANALYSIS.md`. That's why the portal won't run or submit a task folder that already holds one.
+- **Altadena Portal:** write it after the portal's Model run, from the Agent runs tab and the run's logs. Paste it, or load this file, into the Run analysis section on the Agent runs tab, and save it before you submit, as cyber tasks can't be submitted without it. Running Model runs again, or an upload that replaces the version's files, clears it, and the portal warns you before either. When you submit, it's locked and added to the version's zip as `RUN_ANALYSIS.md`, in place of any copy at the top of your task folder.
 
 **Model:**
 

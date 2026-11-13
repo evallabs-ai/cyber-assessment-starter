@@ -41,7 +41,7 @@ Click **Use this template** on GitHub to make your own **private** repo, then cl
 ./check.sh example-note-share
 ```
 
-You should see seven `PASS` lines. The first run takes a few minutes while Docker builds the images.
+You should see seven `PASS` lines, and a `WARN` that `RUN_ANALYSIS.md` isn't filled in yet. That's expected: you write it after the model runs, and the `WARN` turns into an eighth `PASS`. The first run takes a few minutes while Docker builds the images.
 
 ## Build your task
 
@@ -149,9 +149,9 @@ Keep your repo private.
 
 If you submit a task through Altadena Portal:
 
-1. Upload your task folder with its `SUBMISSION.md`. If that file is missing, isn't UTF-8 text, is blank or is over 100 KB, or has a copy under `environment/`, the portal stores the version but blocks Run and Submit until an upload with a fixed `SUBMISSION.md` replaces it. A `RUN_ANALYSIS.md` in the task folder blocks them too, until an upload without one replaces it, as the portal adds that file itself, so keep yours at the top of your repo. `check.sh` catches all of these. The portal's review checks your answers against the task's files, and flags any name or contact details.
+1. Upload your task folder with its `SUBMISSION.md`. If that file is missing, isn't UTF-8 text, is blank or is over 100 KB, or has a copy under `environment/`, the portal stores the version but blocks Run and Submit until an upload with a fixed `SUBMISSION.md` replaces it. `check.sh` catches all of these. The portal's review checks your answers against the task's files, and flags any name or contact details.
 2. After the portal's Model run, write your run analysis from the Agent runs tab and the run's logs. Paste it, or load your `RUN_ANALYSIS.md`, into the Run analysis section on the Agent runs tab, and save it. Cyber tasks can't be submitted without it. Running Model runs again, or an upload that replaces the version's files, clears it, and the portal warns you before either.
-3. Submit. Your run analysis is then locked, and added to the version's zip as `RUN_ANALYSIS.md`.
+3. Submit. Your run analysis is then locked, and added to the version's zip as `RUN_ANALYSIS.md`, in place of any copy at the top of your task folder.
 
 ### Passes locally, fails on the portal?
 

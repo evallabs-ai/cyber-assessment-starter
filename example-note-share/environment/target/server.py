@@ -17,6 +17,10 @@ class NoteHandler(BaseHTTPRequestHandler):
         name = parse_qs(url.query).get("name", [""])[0]
         # The flaw: this removes "../" once, so "....//" becomes "../" afterwards.
         name = name.replace("../", "")
+        # Joined to NOTES_DIR, an absolute name would replace it. Checked after the filter,
+        # which can leave one: "..//etc/passwd" becomes "/etc/passwd".
+        if Path(name).is_absolute():
+            return self.reply(404, "No such note\n")
         try:
             return self.reply(200, (NOTES_DIR / name).read_text())
         except OSError:

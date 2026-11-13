@@ -66,6 +66,66 @@ else
   failed=1
 fi
 
+# Locally Harbor gives the containers one shared localhost, but on the portal each has its own.
+# So in a task with other services, main must share one's network to reach it at localhost.
+compose="$task/environment/docker-compose.yaml"
+if [ -f "$compose" ]; then
+  # One line for each service but main, then "main <its network_mode>".
+  services=$(tr -d '\r' < "$compose" | awk '
+    /^[^[:space:]#]/ { in_services = /^services:[[:space:]]*(#.*)?$/; indent = ""; next }
+    !in_services || /^[[:space:]]*(#.*)?$/ { next }
+    {
+      match($0, /^[[:space:]]*/)
+      if (indent == "") indent = RLENGTH
+      key = $1; gsub(/["\047]/, "", key)
+      if (RLENGTH == indent) {
+        name = key; sub(/:.*/, "", name)
+        if (name != "main") print name
+      } else if (name == "main" && key == "network_mode:") {
+        mode = $2; gsub(/["\047]/, "", mode)
+        print "main " mode
+      }
+    }')
+  others=$(printf '%s\n' "$services" | grep -v '^main ')
+  hub=$(printf '%s\n' "$services" | sed -n 's/^main service://p')
+  if [ -n "$others" ]; then
+    if [ -n "$hub" ] && printf '%s\n' "$others" | grep -qxF "$hub"; then
+      echo "PASS  main shares $hub's network"
+    else
+      echo "FAIL  On the portal each container has its own localhost. Add network_mode: \"service:target\" under main in environment/docker-compose.yaml (use your service's name)"
+      failed=1
+    fi
+  fi
+fi
+
+# The write-up goes beside instruction.md. These are the checks the portal makes on it.
+write_up="$task/SUBMISSION.md"
+# find matches the name exactly, where a Mac's disk would also take submission.md.
+if [ -z "$(find "$task" -mindepth 1 -maxdepth 1 -type f -name SUBMISSION.md)" ]; then
+  echo "FAIL  $write_up is missing. Copy the template from example-note-share and fill it in"
+  failed=1
+elif [ "$(wc -c < "$write_up")" -gt 100000 ]; then
+  echo "FAIL  $write_up is over 100 KB"
+  failed=1
+elif [ "$(LC_ALL=C tr -d '\000' < "$write_up" | wc -c)" -ne "$(wc -c < "$write_up")" ] \
+  || ! iconv -f UTF-8 -t UTF-8 < "$write_up" > /dev/null 2>&1; then
+  echo "FAIL  $write_up isn't UTF-8 text"
+  failed=1
+elif ! LC_ALL=C grep -q '[^[:space:]]' "$write_up"; then
+  echo "FAIL  $write_up is blank"
+  failed=1
+else
+  echo "PASS  SUBMISSION.md"
+fi
+# The portal also refuses a copy under environment/, which images are built from, and any
+# RUN_ANALYSIS.md, which it adds itself.
+misplaced=$( { find "$task/environment" -iname SUBMISSION.md; find "$task" -iname RUN_ANALYSIS.md; } 2>/dev/null)
+if [ -n "$misplaced" ]; then
+  echo "FAIL  these files can't be in the task. Keep SUBMISSION.md only beside instruction.md, and RUN_ANALYSIS.md outside the task folder:"
+  printf '%s\n' "$misplaced" | sed 's/^/        /'
+  failed=1
+fi
+
 # We test a clean clone, so anything that isn't committed won't be there.
 if git -C "$task" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   uncommitted=$(git -C "$task" status --porcelain --ignored --untracked-files=all -- . | grep -v '\.DS_Store$' | cut -c4-)

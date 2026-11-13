@@ -1,5 +1,7 @@
 services:
   main:
+    # On the portal each container has its own localhost, so main shares target's to reach it.
+    network_mode: "service:target"
     depends_on:
       target:
         condition: service_healthy

@@ -98,6 +98,39 @@ if [ -f "$compose" ]; then
   fi
 fi
 
+# The portal can build with an older Dockerfile parser than your Docker's, unless a Dockerfile asks
+# for Docker's current one at its very top. It blocks Run and Submit until every Dockerfile does.
+syntax_line='# syntax=docker/dockerfile:1'
+# A parser directive, which counts only before anything else, even a blank line or a comment.
+directive='^#[[:space:]]*([A-Za-z][A-Za-z0-9]*)[[:space:]]*=[[:space:]]*(.*[^[:space:]])[[:space:]]*$'
+# Docker's own parser, version 1: as written above, or with a version, its labs channel or a digest.
+parser='^(docker\.io/)?docker/dockerfile:1(\.[0-9]+){0,2}(-labs)?(@sha256:[0-9a-f]{64})?$'
+dockerfiles=0
+unasked=""
+while IFS= read -r -d '' dockerfile; do
+  dockerfiles=$((dockerfiles + 1))
+  syntax=""
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"
+    [[ $line =~ $directive ]] || break
+    key="${BASH_REMATCH[1]}"
+    value="${BASH_REMATCH[2]}"
+    case "$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]')" in
+      syntax) syntax="$value"; break ;;
+      escape|check) ;;
+      *) break ;;
+    esac
+  done < <(LC_ALL=C sed $'1s/^\xEF\xBB\xBF//' "$dockerfile")
+  [[ $syntax =~ $parser ]] || unasked="$unasked${dockerfile#"$task"/}"$'\n'
+done < <(find "$task" -type f \( -iname Dockerfile -o -iname 'Dockerfile.*' -o -iname '*.Dockerfile' \) ! -iname '*.dockerignore' -print0)
+if [ -n "$unasked" ]; then
+  echo "FAIL  the portal blocks Run and Submit until these Dockerfiles start with $syntax_line:"
+  printf '%s' "$unasked" | sed 's/^/        /'
+  failed=1
+elif [ "$dockerfiles" -gt 0 ]; then
+  echo "PASS  every Dockerfile starts with $syntax_line"
+fi
+
 # The write-up goes beside instruction.md. These are the checks the portal makes on it.
 write_up="$task/SUBMISSION.md"
 # find matches the name exactly, where a Mac's disk would also take submission.md.

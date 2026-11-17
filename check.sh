@@ -7,6 +7,9 @@ task="${1:?Usage: ./check.sh <task-folder>}"
 task="${task%/}"
 [ -f "$task/task.toml" ] || { echo "No task.toml in $task"; exit 2; }
 [ -f "$task/wrong_solution/solve.sh" ] || { echo "Missing $task/wrong_solution/solve.sh"; exit 2; }
+# The leak test, which the portal runs in every model run too. It sits beside this script.
+leak_test="$(cd "$(dirname "$0")" && pwd)/leak-test.sh"
+[ -f "$leak_test" ] || { echo "Missing leak-test.sh, which belongs beside check.sh"; exit 2; }
 # The one Harbor version tasks are checked with, here and on the portal. Another version can connect
 # a task's containers differently, so a task that passes on it may not pass where it's run next.
 harbor_version=0.25.0
@@ -178,6 +181,30 @@ mkdir -p "$work/wrong"
 cp -R "$task" "$copy"
 cp "$copy/wrong_solution/solve.sh" "$copy/solution/solve.sh"
 expect wrong-solution "$copy" oracle 0
+
+# Runs the leak test through the oracle agent, in a temporary copy. From inside main, with the
+# network your task gives the model, it asks three places outside the task for a page, and fails
+# if any answers. Its wait is for the portal's sandbox, so it's skipped here.
+copy="$work/leak/$(basename "$task")"
+mkdir -p "$work/leak"
+cp -R "$task" "$copy"
+{ head -n 1 "$leak_test"; echo "LEAK_TEST_WAIT=0"; tail -n +2 "$leak_test"; } > "$copy/solution/solve.sh"
+harbor run -p "$copy" -a oracle -k 1 -o "$work/jobs" --job-name leak-test -y > "$work/leak-test.log" 2>&1
+# The last line the test prints that starts with VERDICT: says what it found.
+verdict=$(find "$work/jobs/leak-test" -path '*/agent/oracle.txt' -exec grep -h '^VERDICT:' {} + 2>/dev/null | tail -n 1)
+case "$verdict" in
+  "VERDICT: pass"*)
+    echo "PASS  leak test: nothing outside the task answered"
+    ;;
+  "VERDICT: fail"*)
+    reached=${verdict#VERDICT: fail. Reached: }
+    echo "FAIL  leak test: from the model's container, it reached ${reached%;}. See \"Connect your containers\" in the README (log: $work/leak-test.log)"
+    failed=1
+    ;;
+  *)
+    echo "WARN  leak test couldn't tell whether the model's container can reach the internet: ${verdict:-it gave no verdict} (log: $work/leak-test.log)"
+    ;;
+esac
 
 if [ "$failed" = 0 ]; then
   echo "All checks passed. Next: test a frontier model, then submit."

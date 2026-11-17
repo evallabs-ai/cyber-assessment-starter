@@ -41,7 +41,7 @@ Click **Use this template** on GitHub to make your own **private** repo, then cl
 ./check.sh example-note-share
 ```
 
-You should see seven `PASS` lines, and a `WARN` that `RUN_ANALYSIS.md` isn't filled in yet. That's expected: you write it after the model runs, and the `WARN` turns into an eighth `PASS`. The first run takes a few minutes while Docker builds the images.
+You should see eight `PASS` lines, and a `WARN` that `RUN_ANALYSIS.md` isn't filled in yet. That's expected: you write it after the model runs, and the `WARN` turns into a ninth `PASS`. The first run takes a few minutes while Docker builds the images.
 
 ## Build your task
 
@@ -149,17 +149,19 @@ Keep your repo private.
 
 If you submit a task through Altadena Portal:
 
-1. Upload your task folder with its `SUBMISSION.md`. If that file is missing, isn't UTF-8 text, is blank or is over 100 KB, or has a copy under `environment/`, the portal stores the version but blocks Run and Submit until an upload with a fixed `SUBMISSION.md` replaces it. `check.sh` catches all of these. The portal's review checks your answers against the task's files, and flags any name or contact details.
+1. Upload your task folder with its `SUBMISSION.md`. If that file is missing, isn't UTF-8 text, is blank or is over 100 KB, or has a copy under `environment/`, the portal stores the version but blocks Run and Submit until an upload with a fixed `SUBMISSION.md` replaces it. It blocks them the same way when a Dockerfile doesn't start with `# syntax=docker/dockerfile:1` (see [Passes locally, fails on the portal?](#passes-locally-fails-on-the-portal)). `check.sh` catches all of these. The portal's review checks your answers against the task's files, and flags any name or contact details.
 2. After the portal's Model run, write your run analysis from the Agent runs tab and the run's logs. Paste it, or load your `RUN_ANALYSIS.md`, into the Run analysis section on the Agent runs tab, and save it. Cyber tasks can't be submitted without it. Running Model runs again, or an upload that replaces the version's files, clears it, and the portal warns you before either.
 3. Submit. Your run analysis is then locked, and added to the version's zip as `RUN_ANALYSIS.md`, in place of any copy at the top of your task folder.
 
 ### Passes locally, fails on the portal?
 
-`check.sh` runs your task on your own Docker, while the portal runs it in a sandbox of its own. Four things differ there:
+`check.sh` runs your task on your own Docker, while the portal runs it in a sandbox of its own. Six things differ there:
 
 - **Each container has its own `localhost`.** Locally, Harbor puts `main` and your other services on one shared `localhost`, as a side effect of how it blocks the internet. The portal's sandbox runs `docker-compose.yaml` as written, so `main` reaches the target at `localhost` only through the `network_mode: "service:target"` line under `main`. Keep it, with your service's name. Don't give `target` its own `networks` or `network_mode`: locally, that takes it, and `main` with it, out of Harbor's block on the internet. With several services, make one the hub, and have every other service, `main` included, join it with `network_mode: "service:<hub>"`, each on a port of its own. We haven't tested that yet.
 - **No internet at all.** Nothing in your task reaches the internet while it runs there, whatever its compose file says. Install what you need when the images are built.
 - **Your declared CPU and memory are enforced.** The sandbox is sized from the `cpus` and `memory_mb` in your `task.toml`, shared by all your containers, and a task that declares none gets 1 CPU and 1 GB. Locally, only `main` is limited, and only when you declare a size. So declare what your containers need together, up to 4 CPUs and 16 GB.
 - **Time limits.** The portal blocks Run and Submit when `[agent] timeout_sec` is over 7200 (two hours). Your other timeouts hold there too, but the images are built again for each Model run, without your machine's Docker cache, and everything runs on the sandbox's CPUs. Leave room in `build_timeout_sec` and `[verifier] timeout_sec`.
+- **Each Dockerfile starts with `# syntax=docker/dockerfile:1`.** The portal can build your images with an older Dockerfile parser than your own Docker's, so a newer feature, such as a letter mode in `COPY --chmod=a=rX`, can build locally and fail there. With that line as the very first line, above any comment or blank line, both use Docker's current parser. The portal blocks Run and Submit for a Dockerfile without it, and `check.sh` fails. The example's Dockerfiles show it.
+- **The CPU type.** The portal's sandboxes are x86_64. On a Mac with Apple Silicon, Docker builds and runs arm64 images unless told otherwise. Most tasks behave the same on both, but a compiled binary, the memory offsets an exploit relies on, or a base image pinned to one platform's digest may not. To run as the portal does, `export DOCKER_DEFAULT_PLATFORM=linux/amd64` before `check.sh`. It's slower, as Docker then emulates x86_64.
 
 Questions? Reply to the message that brought you here.

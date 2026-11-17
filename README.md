@@ -41,7 +41,7 @@ Click **Use this template** on GitHub to make your own **private** repo, then cl
 ./check.sh example-note-share
 ```
 
-You should see a line with the versions it's running on, then seven `PASS` lines, and a `WARN` that `RUN_ANALYSIS.md` isn't filled in yet. That's expected: you write it after the model runs, and the `WARN` turns into an eighth `PASS`. The first run takes a few minutes while Docker builds the images.
+You should see a line with the versions it's running on, then eight `PASS` lines, and a `WARN` that `RUN_ANALYSIS.md` isn't filled in yet. That's expected: you write it after the model runs, and the `WARN` turns into a ninth `PASS`. The first run takes a few minutes while Docker builds the images.
 
 ## Build your task
 
@@ -69,7 +69,7 @@ The example does all of this, so keep these parts of its structure:
 - **Keep secrets out of the model's container.** A flag on its disk can simply be read, so put secrets in the target service.
 - **Keep answers out of the check.** Store a hash, not the flag itself, in `tests/`.
 - **Have the model write its answer to `/logs/artifacts/`.** The check runs in a separate container and reads it from there.
-- **No internet access.** Keep `network_mode = "no-network"` in `task.toml`. Harbor then puts `main` and the target on one shared `localhost`, because neither declares any networking in `docker-compose.yaml`. So the model reaches the target at `http://localhost:<port>`, and can reach nothing outside the task. The portal connects them the same way. If the model must reach a service by its name, or must be kept away from one, see [Connect your containers](#connect-your-containers).
+- **No internet access.** Keep `network_mode = "no-network"` in `task.toml`. Harbor then puts `main` and the target on one shared `localhost`, because neither declares any networking in `docker-compose.yaml`. So the model reaches the target at `http://localhost:<port>`, and can reach nothing outside the task. The portal connects them the same way. `check.sh` tests this with `leak-test.sh`: from inside `main`, it asks three places outside your task for a page, and fails if any answers. The portal runs the same test in every Model run. If the model must reach a service by its name, or must be kept away from one, see [Connect your containers](#connect-your-containers).
 - **Give the model enough time.** Keep `[agent] timeout_sec` in `task.toml` at 1800 (30 minutes) or more, and don't set tight `cpus`, `memory_mb` or `storage_mb` limits. A model should fail because the problem is hard, not because it ran out of time or memory. `check.sh` fails if the timeout is lower.
 - **Score with automatic checks.** If an AI model grades a written report, the automatic checks must still decide the score, and the grading prompt must treat the report as untrusted.
 
@@ -94,11 +94,12 @@ When a task has no internet access, Harbor adds a container of its own to it, na
 | `network_mode: none` | It has no network at all |
 | `network_mode: "service:<service>"` | It shares the network of the service it names |
 
-Three rules go with them:
+Four rules go with them:
 
 - **`main` declares no `networks`.** Harbor's filter covers only what is inside its own container's network. With networks of its own, `main` would be outside it, and the model would have the internet on your Docker.
 - **To put `main` on a network, give the network to `harbor-docker-egress-control-sidecar`.** Add an entry with that name to your compose file, with `networks` and nothing else, and Harbor fills in the rest. `main` is then on those networks too. One of them must not be internal: it's the way out to the model's API when a model runs.
 - **Name the services the model may call in `task.toml`.** Until you do, the filter stops `main` from reaching them. Use an allowlist that lists only your own services, each by its service name or by a network alias that can't be a real site's name, such as `edge.shop.internal`. The model's API is added for each run, so leave it out.
+- **Only web traffic reaches a service the model calls by name.** Harbor's filter lets HTTP and HTTPS through to the services you list, and nothing else. A database connection, SSH or a plain socket to a listed service gets no answer under `check.sh`, though it would on the portal. A service the model must reach some other way should declare no networking, so the model reaches it at `localhost:<port>`, which the filter leaves alone.
 
 Here is a task with a gateway the model calls by name, at `http://edge:<port>`, and a store behind it that the model can't reach. Only the networking lines are shown:
 

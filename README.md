@@ -27,9 +27,9 @@ A good task:
 
 You need three tools:
 
-- **Docker**, a recent version. Tasks run without internet access, and Harbor can only enforce that if Docker's kernel supports the firewall rules it uses. `check.sh` tells you if yours doesn't.
+- **Docker**, a recent version. Tasks run without internet access, and Harbor can only enforce that if Docker's kernel supports the firewall rules it uses. `check.sh` tells you if yours doesn't. It also prints the Docker and Compose versions it ran on, so include that line when you report a problem.
 - **[uv](https://docs.astral.sh/uv/getting-started/installation/)**, to install Harbor.
-- **Harbor 0.25.0.** Use exactly this version, because these instructions and `check.sh` were written for it:
+- **Harbor 0.25.0.** Use exactly this version. Every task is checked with it, here and on Altadena Portal, and `check.sh` stops on any other. How Harbor connects a task's containers and blocks the internet can change from one version to the next, so a task is only known to behave the same on this one. Anyone who receives a finished task should run it with Harbor 0.25.0 too. Install it with:
 
 ```bash
 uv tool install harbor==0.25.0
@@ -41,7 +41,7 @@ Click **Use this template** on GitHub to make your own **private** repo, then cl
 ./check.sh example-note-share
 ```
 
-You should see eight `PASS` lines, and a `WARN` that `RUN_ANALYSIS.md` isn't filled in yet. That's expected: you write it after the model runs, and the `WARN` turns into a ninth `PASS`. The first run takes a few minutes while Docker builds the images.
+You should see a line with the versions it's running on, then seven `PASS` lines, and a `WARN` that `RUN_ANALYSIS.md` isn't filled in yet. That's expected: you write it after the model runs, and the `WARN` turns into an eighth `PASS`. The first run takes a few minutes while Docker builds the images.
 
 ## Build your task
 
@@ -55,7 +55,7 @@ Copy `example-note-share` to a new folder, then change what you need. When you'r
 | `task.toml` | Settings such as timeouts. Add your task type to `keywords`: `offensive` if the model attacks or extracts something, `defensive` if it fixes or hardens something, or `detection` if it analyzes evidence or writes detections |
 | `SUBMISSION.md` | Your write-up of the task: answer its six questions. Keep it here, beside `instruction.md`, and never under `environment/`, where the model could read it. It goes out with the task, so leave out your name and contact details |
 | `environment/Dockerfile` | The container the model works in |
-| `environment/docker-compose.yaml` | Adds the target as a separate service, and puts `main` on its network with `network_mode: "service:target"`, so the model reaches it at `localhost` |
+| `environment/docker-compose.yaml` | Adds the target as a separate service. Neither `main` nor the target declares any networking, so they share one `localhost`, and the model reaches the target there |
 | `environment/target/` | The target itself. The model can't see these files, only the running service |
 | `solution/solve.sh` | Your reference solution. It must earn a score of 1 |
 | `wrong_solution/solve.sh` | A tempting wrong approach. It must earn a score of 0 |
@@ -69,7 +69,7 @@ The example does all of this, so keep these parts of its structure:
 - **Keep secrets out of the model's container.** A flag on its disk can simply be read, so put secrets in the target service.
 - **Keep answers out of the check.** Store a hash, not the flag itself, in `tests/`.
 - **Have the model write its answer to `/logs/artifacts/`.** The check runs in a separate container and reads it from there.
-- **No internet access.** Keep `network_mode = "no-network"` in `task.toml`. The model and the target share one network because `main` joins the target's, with `network_mode: "service:target"` in `docker-compose.yaml`. So the model reaches the target at `http://localhost:<port>`, and can reach nothing outside the task. You need that line: without it, `localhost` reaches the target under `check.sh` but not on the portal.
+- **No internet access.** Keep `network_mode = "no-network"` in `task.toml`. Harbor then puts `main` and the target on one shared `localhost`, because neither declares any networking in `docker-compose.yaml`. So the model reaches the target at `http://localhost:<port>`, and can reach nothing outside the task. The portal connects them the same way. If the model must reach a service by its name, or must be kept away from one, see [Connect your containers](#connect-your-containers).
 - **Give the model enough time.** Keep `[agent] timeout_sec` in `task.toml` at 1800 (30 minutes) or more, and don't set tight `cpus`, `memory_mb` or `storage_mb` limits. A model should fail because the problem is hard, not because it ran out of time or memory. `check.sh` fails if the timeout is lower.
 - **Score with automatic checks.** If an AI model grades a written report, the automatic checks must still decide the score, and the grading prompt must treat the report as untrusted.
 
@@ -80,6 +80,55 @@ A model will take any shortcut your check allows, so make sure it rejects these:
 - **Offensive:** the flag can only be reached through the flaw you intended. Close other routes, such as default passwords, debug endpoints or readable config files.
 - **Defensive:** blocking one attack string doesn't pass, because the check tries several variants of the attack. Breaking the service or rejecting every request doesn't pass either, because the check also confirms that legitimate requests still work. If you check that a secret isn't exposed, also catch encoded copies, such as base64.
 - **Detection:** flagging everything doesn't pass, because the evidence includes harmless activity that looks suspicious and false alarms count against the score. The evidence must also agree with itself, with every expected answer following from it.
+
+### Connect your containers
+
+Most tasks need nothing more than the example: leave networking out of `docker-compose.yaml`, and reach every service at `localhost`. Read on if the model must reach a service by its name, or must be kept away from one.
+
+When a task has no internet access, Harbor adds a container of its own to it, named `harbor-docker-egress-control-sidecar`, which filters every connection going out. Harbor puts `main` inside that container's network, along with every service that declares no networking. Each of your services takes one of four shapes:
+
+| In `docker-compose.yaml`, the service has | How it's connected |
+|---|---|
+| No `networks` and no `network_mode` | It shares one `localhost` with `main`, behind Harbor's filter. Give each such service a port of its own. They can't reach each other by service name |
+| `networks`, each marked `internal: true` | Other services on those networks reach it by its service name. It has no internet |
+| `network_mode: none` | It has no network at all |
+| `network_mode: "service:<service>"` | It shares the network of the service it names |
+
+Three rules go with them:
+
+- **`main` declares no `networks`.** Harbor's filter covers only what is inside its own container's network. With networks of its own, `main` would be outside it, and the model would have the internet on your Docker.
+- **To put `main` on a network, give the network to `harbor-docker-egress-control-sidecar`.** Add an entry with that name to your compose file, with `networks` and nothing else, and Harbor fills in the rest. `main` is then on those networks too. One of them must not be internal: it's the way out to the model's API when a model runs.
+- **Name the services the model may call in `task.toml`.** Until you do, the filter stops `main` from reaching them. Use an allowlist that lists only your own services, each by its service name or by a network alias that can't be a real site's name, such as `edge.shop.internal`. The model's API is added for each run, so leave it out.
+
+Here is a task with a gateway the model calls by name, at `http://edge:<port>`, and a store behind it that the model can't reach. Only the networking lines are shown:
+
+```yaml
+services:
+  main: {}                                 # declares nothing, so it's behind Harbor's filter
+  harbor-docker-egress-control-sidecar:
+    networks: [frontend, egress]           # puts main on frontend. egress is the way out to the model's API
+  edge:
+    networks: [frontend, backend]
+  etcd:
+    networks: [backend]                    # the model can't reach it
+networks:
+  frontend: {internal: true}
+  backend: {internal: true}
+  egress: {}
+```
+
+```toml
+[environment]
+network_mode = "no-network"
+
+[agent]
+network_mode = "allowlist"
+allowed_hosts = ["edge"]
+```
+
+`[agent]` and `[verifier]` each use `[environment]`'s setting unless they set their own, so a check that runs in `main` and calls `edge` needs the same allowlist under `[verifier]`.
+
+The portal connects your containers the way Harbor does on your own Docker, so there's nothing to add for it. It checks these shapes and rules when you upload (see [On Altadena Portal](#on-altadena-portal)).
 
 ## Test it
 
@@ -149,16 +198,15 @@ Keep your repo private.
 
 If you submit a task through Altadena Portal:
 
-1. Upload your task folder with its `SUBMISSION.md`. If that file is missing, isn't UTF-8 text, is blank or is over 100 KB, or has a copy under `environment/`, the portal stores the version but blocks Run and Submit until an upload with a fixed `SUBMISSION.md` replaces it. It blocks them the same way when a Dockerfile doesn't start with `# syntax=docker/dockerfile:1` (see [Passes locally, fails on the portal?](#passes-locally-fails-on-the-portal)). `check.sh` catches all of these. The portal's review checks your answers against the task's files, and flags any name or contact details.
+1. Upload your task folder with its `SUBMISSION.md`. If that file is missing, isn't UTF-8 text, is blank or is over 100 KB, or has a copy under `environment/`, the portal stores the version but blocks Run and Submit until an upload with a fixed `SUBMISSION.md` replaces it. It blocks them the same way when a Dockerfile doesn't start with `# syntax=docker/dockerfile:1` (see [Passes locally, fails on the portal?](#passes-locally-fails-on-the-portal)). `check.sh` catches all of these. The portal also blocks them when a task's networking doesn't follow [Connect your containers](#connect-your-containers), which `check.sh` doesn't check. The portal's review checks your answers against the task's files, and flags any name or contact details.
 2. After the portal's Model run, write your run analysis from the Agent runs tab and the run's logs. Paste it, or load your `RUN_ANALYSIS.md`, into the Run analysis section on the Agent runs tab, and save it. Cyber tasks can't be submitted without it. Running Model runs again, or an upload that replaces the version's files, clears it, and the portal warns you before either.
 3. Submit. Your run analysis is then locked, and added to the version's zip as `RUN_ANALYSIS.md`, in place of any copy at the top of your task folder.
 
 ### Passes locally, fails on the portal?
 
-`check.sh` runs your task on your own Docker, while the portal runs it in a sandbox of its own. Six things differ there:
+`check.sh` runs your task on your own Docker, while the portal runs it in a sandbox of its own. The portal connects your containers the way Harbor does on your Docker (see [Connect your containers](#connect-your-containers)), so a service your task reaches at `localhost` or by name under `check.sh` is reached the same way there, and there's no line to add for the portal. If `main` still has a `network_mode: "service:target"` line from an earlier version of this README, it works as before, and you can take it out. Five things do differ there:
 
-- **Each container has its own `localhost`.** Locally, Harbor puts `main` and your other services on one shared `localhost`, as a side effect of how it blocks the internet. The portal's sandbox runs `docker-compose.yaml` as written, so `main` reaches the target at `localhost` only through the `network_mode: "service:target"` line under `main`. Keep it, with your service's name. Don't give `target` its own `networks` or `network_mode`: locally, that takes it, and `main` with it, out of Harbor's block on the internet. With several services, make one the hub, and have every other service, `main` included, join it with `network_mode: "service:<hub>"`, each on a port of its own. We haven't tested that yet.
-- **No internet at all.** Nothing in your task reaches the internet while it runs there, whatever its compose file says. Install what you need when the images are built.
+- **No internet at all.** Nothing in your task reaches the internet while it runs there, whatever its compose file says. On your own Docker, a service on a network that isn't marked `internal: true` does have the internet, so mark every network your services are on as internal. Install what you need when the images are built.
 - **Your declared CPU and memory are enforced.** The sandbox is sized from the `cpus` and `memory_mb` in your `task.toml`, shared by all your containers, and a task that declares none gets 1 CPU and 1 GB. Locally, only `main` is limited, and only when you declare a size. So declare what your containers need together, up to 4 CPUs and 16 GB.
 - **Time limits.** The portal blocks Run and Submit when `[agent] timeout_sec` is over 7200 (two hours). Your other timeouts hold there too, but the images are built again for each Model run, without your machine's Docker cache, and everything runs on the sandbox's CPUs. Leave room in `build_timeout_sec` and `[verifier] timeout_sec`.
 - **Each Dockerfile starts with `# syntax=docker/dockerfile:1`.** The portal can build your images with an older Dockerfile parser than your own Docker's, so a newer feature, such as a letter mode in `COPY --chmod=a=rX`, can build locally and fail there. With that line as the very first line, above any comment or blank line, both use Docker's current parser. The portal blocks Run and Submit for a Dockerfile without it, and `check.sh` fails. The example's Dockerfiles show it.

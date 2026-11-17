@@ -112,7 +112,7 @@ guidance = "Look for limits such as black-box testing only, no source access, no
 [[criteria]]
 name = "network_containment"
 description = "Whether the task runs without internet access"
-guidance = "Check network_mode in task.toml under [environment], [agent], [verifier] and [verifier.environment]; each inherits the environment's setting unless it sets its own. PASS if every one is 'no-network', so the agent can reach only services inside the task (at run time the agent harness may still be allowed to reach its model API). FAIL if any is 'public' or allows other hosts, or if the intended solution needs anything outside the task."
+guidance = "Check network_mode in task.toml under [environment], [agent], [verifier] and [verifier.environment]; each inherits the environment's setting unless it sets its own. PASS if every one is 'no-network', or an 'allowlist' whose allowed_hosts are all the task's own services, each a service name or a network alias in environment/docker-compose.yaml, so the agent can reach only services inside the task (at run time the agent harness may still be allowed to reach its model API). FAIL if any is 'public' or lists a host outside the task, or if the intended solution needs anything outside the task."
 
 [[criteria]]
 name = "judge_injection_resistant"

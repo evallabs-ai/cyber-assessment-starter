@@ -7,8 +7,22 @@ task="${1:?Usage: ./check.sh <task-folder>}"
 task="${task%/}"
 [ -f "$task/task.toml" ] || { echo "No task.toml in $task"; exit 2; }
 [ -f "$task/wrong_solution/solve.sh" ] || { echo "Missing $task/wrong_solution/solve.sh"; exit 2; }
-command -v harbor >/dev/null || { echo "Harbor isn't installed. Run: uv tool install harbor==0.25.0"; exit 2; }
+# The one Harbor version tasks are checked with, here and on the portal. Another version can connect
+# a task's containers differently, so a task that passes on it may not pass where it's run next.
+harbor_version=0.25.0
+command -v harbor >/dev/null || { echo "Harbor isn't installed. Run: uv tool install harbor==$harbor_version"; exit 2; }
+# The first thing in the output that looks like a version, with any suffix such as rc1 kept.
+found=$(harbor --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+[0-9A-Za-z.+-]*' | head -n 1)
+if [ "$found" != "$harbor_version" ]; then
+  echo "Tasks are checked with Harbor $harbor_version, and yours ($(command -v harbor)) is version ${found:-unknown}. Run: uv tool install harbor==$harbor_version"
+  exit 2
+fi
 docker info >/dev/null 2>&1 || { echo "Docker isn't running."; exit 2; }
+# Shown so that a report of a failed check says what it ran on. Nothing is compared with these.
+IFS='|' read -r docker_engine docker_platform docker_kernel < <(
+  docker version --format '{{.Server.Version}}|{{.Server.Platform.Name}}|{{.Server.KernelVersion}}' 2>/dev/null)
+compose_version=$(docker compose version --short 2>/dev/null)
+echo "Checking with Harbor $harbor_version, Docker ${docker_engine:-(version unknown)} (${docker_platform:+$docker_platform, }kernel ${docker_kernel:-unknown}) and Docker Compose ${compose_version:-(version unknown)}."
 # Tasks run offline. This is the same kernel test Harbor uses before it will block internet access.
 docker run --rm alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 \
   sh -c "[ ! -f /proc/config.gz ] || zcat /proc/config.gz | grep -qE '^CONFIG_NFT_FIB_INET=[ym]'" >/dev/null 2>&1 \
@@ -64,38 +78,6 @@ elif awk -v t="$timeout" -v min="$min_timeout" 'BEGIN { exit !(t + 0 >= min + 0)
 else
   echo "FAIL  agent timeout is ${timeout}s. Set [agent] timeout_sec in task.toml to $min_timeout or more"
   failed=1
-fi
-
-# Locally Harbor gives the containers one shared localhost, but on the portal each has its own.
-# So in a task with other services, main must share one's network to reach it at localhost.
-compose="$task/environment/docker-compose.yaml"
-if [ -f "$compose" ]; then
-  # One line for each service but main, then "main <its network_mode>".
-  services=$(tr -d '\r' < "$compose" | awk '
-    /^[^[:space:]#]/ { in_services = /^services:[[:space:]]*(#.*)?$/; indent = ""; next }
-    !in_services || /^[[:space:]]*(#.*)?$/ { next }
-    {
-      match($0, /^[[:space:]]*/)
-      if (indent == "") indent = RLENGTH
-      key = $1; gsub(/["\047]/, "", key)
-      if (RLENGTH == indent) {
-        name = key; sub(/:.*/, "", name)
-        if (name != "main") print name
-      } else if (name == "main" && key == "network_mode:") {
-        mode = $2; gsub(/["\047]/, "", mode)
-        print "main " mode
-      }
-    }')
-  others=$(printf '%s\n' "$services" | grep -v '^main ')
-  hub=$(printf '%s\n' "$services" | sed -n 's/^main service://p')
-  if [ -n "$others" ]; then
-    if [ -n "$hub" ] && printf '%s\n' "$others" | grep -qxF "$hub"; then
-      echo "PASS  main shares $hub's network"
-    else
-      echo "FAIL  On the portal each container has its own localhost. Add network_mode: \"service:target\" under main in environment/docker-compose.yaml (use your service's name)"
-      failed=1
-    fi
-  fi
 fi
 
 # The portal can build with an older Dockerfile parser than your Docker's, unless a Dockerfile asks

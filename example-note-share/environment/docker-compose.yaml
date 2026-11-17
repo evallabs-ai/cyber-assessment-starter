@@ -1,7 +1,7 @@
 services:
+  # Neither service declares networks or network_mode, so Harbor gives them one shared localhost,
+  # and the model reaches the target at http://localhost:8080.
   main:
-    # On the portal each container has its own localhost, so main shares target's to reach it.
-    network_mode: "service:target"
     depends_on:
       target:
         condition: service_healthy

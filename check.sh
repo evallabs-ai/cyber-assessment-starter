@@ -21,10 +21,25 @@ if [ "$found" != "$harbor_version" ]; then
   exit 2
 fi
 docker info >/dev/null 2>&1 || { echo "Docker isn't running."; exit 2; }
-# Shown so that a report of a failed check says what it ran on. Nothing is compared with these.
+# The major versions of Docker and Docker Compose tasks are checked with, here and on the portal.
+# They build a task's images and start its containers, so another major version can read a
+# Dockerfile or a compose file differently. Only the first number is compared, as Docker Desktop
+# chooses the rest.
+docker_major=29
+compose_major=5
+# The rest is shown so that a report of a failed check says what it ran on.
 IFS='|' read -r docker_engine docker_platform docker_kernel < <(
   docker version --format '{{.Server.Version}}|{{.Server.Platform.Name}}|{{.Server.KernelVersion}}' 2>/dev/null)
 compose_version=$(docker compose version --short 2>/dev/null)
+compose_version=${compose_version#v}
+if [ "${docker_engine%%.*}" != "$docker_major" ]; then
+  echo "Tasks are checked with Docker $docker_major, and yours is version ${docker_engine:-unknown}. Use a Docker Desktop that has Docker $docker_major, or install Docker Engine $docker_major."
+  exit 2
+fi
+if [ "${compose_version%%.*}" != "$compose_major" ]; then
+  echo "Tasks are checked with Docker Compose $compose_major, and yours is version ${compose_version:-unknown}. Use a Docker Desktop that has it, or install version $compose_major of the Compose plugin."
+  exit 2
+fi
 echo "Checking with Harbor $harbor_version, Docker ${docker_engine:-(version unknown)} (${docker_platform:+$docker_platform, }kernel ${docker_kernel:-unknown}) and Docker Compose ${compose_version:-(version unknown)}."
 # Tasks run offline. This is the same kernel test Harbor uses before it will block internet access.
 docker run --rm alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 \

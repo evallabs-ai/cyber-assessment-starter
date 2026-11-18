@@ -27,7 +27,7 @@ A good task:
 
 You need three tools:
 
-- **Docker**, a recent version. Tasks run without internet access, and Harbor can only enforce that if Docker's kernel supports the firewall rules it uses. `check.sh` tells you if yours doesn't. It also prints the Docker and Compose versions it ran on, so include that line when you report a problem.
+- **Docker 29 and Docker Compose 5.** `check.sh` stops on another major version of either. They build a task's images and start its containers, here and on Altadena Portal, so another major version can read a Dockerfile or a compose file differently. A current Docker Desktop has both. Tasks also run without internet access, and Harbor can only enforce that if Docker's kernel supports the firewall rules it uses: `check.sh` tells you if yours doesn't. It prints the Docker and Compose versions it ran on, so include that line when you report a problem.
 - **[uv](https://docs.astral.sh/uv/getting-started/installation/)**, to install Harbor.
 - **Harbor 0.25.0.** Use exactly this version. Every task is checked with it, here and on Altadena Portal, and `check.sh` stops on any other. How Harbor connects a task's containers and blocks the internet can change from one version to the next, so a task is only known to behave the same on this one. Anyone who receives a finished task should run it with Harbor 0.25.0 too. Install it with:
 
